@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>음악 나타냄말 실시간 퀴즈</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+:root{--bg:#f5f7fb;--card:#fff;--text:#172033;--muted:#64748b;--accent:#4f46e5;--good:#16a34a;--bad:#dc2626;--line:#e2e8f0}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:1000px;margin:auto;padding:22px}
+h1,h2,h3{margin:0 0 10px}.sub{color:var(--muted);margin:0 0 18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:20px;margin-bottom:16px;box-shadow:0 5px 18px #00000008}
+.tabs{display:flex;gap:8px;margin-bottom:16px}.tab{flex:1;padding:13px;border:0;border-radius:12px;background:#e9edff;color:#3730a3;font-weight:800;font-size:16px;cursor:pointer}.tab.on{background:var(--accent);color:#fff}
+button,input{font:inherit}button{cursor:pointer;border:0;border-radius:12px;padding:12px 16px;font-weight:800}.primary{background:var(--accent);color:#fff}.secondary{background:#eef2ff;color:#3730a3}.danger{background:#fee2e2;color:#991b1b}
+input{width:100%;padding:13px;border:1px solid #cbd5e1;border-radius:12px;font-size:16px}.row{display:flex;gap:10px;align-items:center}.row>*{min-width:0}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.room{font-size:38px;font-weight:900;letter-spacing:5px;text-align:center;padding:10px;background:#eef2ff;border-radius:14px;color:#3730a3}
+.stats{display:flex;gap:8px;flex-wrap:wrap}.pill{background:#f1f5f9;padding:8px 11px;border-radius:999px;font-size:14px}
+.question{font-size:28px;font-weight:900;text-align:center;margin:16px 0}.visual{height:170px;border-radius:16px;background:#f8fafc;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;overflow:hidden}.bars{height:130px;display:flex;align-items:end;gap:8px}.bar{width:30px;border-radius:7px 7px 2px 2px;background:#6366f1}.arrow{font-size:80px;line-height:1}.answerGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}.ans{background:#f1f5f9;text-align:left;min-height:58px}.ans:disabled{cursor:default}.ans.correct{background:#dcfce7;color:#166534}.ans.wrong{background:#fee2e2;color:#991b1b}
+.students{display:flex;flex-direction:column}.student{display:grid;grid-template-columns:1fr auto auto;gap:10px;padding:11px 4px;border-bottom:1px solid var(--line);align-items:center}.ok{color:var(--good);font-weight:900}.no{color:var(--bad);font-weight:900}.wait{color:#94a3b8}.rank{font-weight:900;color:#475569}.hidden{display:none!important}.notice{padding:11px 13px;background:#fffbeb;border:1px solid #fde68a;border-radius:12px;color:#854d0e;font-size:14px}
+@media(max-width:650px){main{padding:12px}.grid{grid-template-columns:1fr}.answerGrid{grid-template-columns:1fr}.question{font-size:22px}.room{font-size:30px}.student{grid-template-columns:1fr auto}}
+</style>
+</head>
+<body>
+<main>
+<h1>🎵 음악 나타냄말 실시간 퀴즈</h1>
+<p class="sub">교사 1명이 방을 만들고, 학생들은 휴대폰으로 접속해 실시간으로 풀이합니다.</p>
+
+<div class="tabs">
+<button id="teacherTab" class="tab on">👩‍🏫 교사</button>
+<button id="studentTab" class="tab">📱 학생</button>
+</div>
+
+<section id="teacherView">
+<div id="teacherSetup" class="card">
+<h2>1. 퀴즈방 만들기</h2>
+<p class="sub">교사 컴퓨터에서 인터넷에 연결된 상태로 시작하세요.</p>
+<button id="createRoom" class="primary">퀴즈방 만들기</button>
+<div id="teacherNotice" class="notice hidden" style="margin-top:12px"></div>
+</div>
+
+<div id="teacherGame" class="hidden">
+<div class="grid">
+<div class="card">
+<h3>학생 접속번호</h3>
+<div id="roomCode" class="room">----</div>
+<p class="sub" style="text-align:center">학생 화면에서 이 번호를 입력하세요.</p>
+<button id="copyCode" class="secondary" style="width:100%">접속번호 복사</button>
+</div>
+<div class="card">
+<h3>진행 상황</h3>
+<div class="stats">
+<span class="pill">참가 <b id="count">0</b>명</span>
+<span class="pill">문제 <b id="qIndex">1</b>/9</span>
+<span class="pill">제출 <b id="submitted">0</b>명</span>
+</div>
+<div style="margin-top:14px"><button id="next" class="primary">다음 문제 ▶</button></div>
+</div>
+</div>
+
+<div class="card">
+<h3>현재 문제</h3>
+<div id="teacherVisual" class="visual"></div>
+<div id="teacherQuestion" class="question"></div>
+</div>
+
+<div class="card">
+<h3>👥 실시간 학생 현황</h3>
+<div id="studentList" class="students"><p class="sub">학생이 들어오면 여기에 표시됩니다.</p></div>
+</div>
+</div>
+</section>
+
+<section id="studentView" class="hidden">
+<div id="studentJoin" class="card">
+<h2>📱 퀴즈 참가</h2>
+<p class="sub">교사가 알려준 접속번호와 이름을 입력하세요.</p>
+<form id="joinForm">
+<input id="codeInput" inputmode="numeric" maxlength="6" placeholder="접속번호 6자리" required style="margin-bottom:10px">
+<input id="nameInput" maxlength="15" placeholder="이름 또는 번호" required style="margin-bottom:10px">
+<button class="primary" style="width:100%">참가하기</button>
+</form>
+<p id="joinMsg" class="notice hidden" style="margin-top:12px"></p>
+</div>
+
+<div id="studentGame" class="hidden">
+<div class="card">
+<div class="stats"><span class="pill">학생: <b id="myName"></b></span><span class="pill">내 점수: <b id="myScore">0</b></span></div>
+<div id="studentVisual" class="visual" style="margin-top:14px"></div>
+<div id="studentQuestion" class="question"></div>
+<div id="answers" class="answerGrid"></div>
+<p id="studentMsg" class="sub" aria-live="polite"></p>
+</div>
+</div>
+</section>
+</main>
+
+<script>
+const QUESTIONS=[
+{q:"p는 어떤 소리를 나타낼까요?",a:["여리게","매우 여리게","세게","매우 세게"],c:0,type:"vol"},
+{q:"mp는 어떤 소리를 나타낼까요?",a:["매우 여리게","여리게","조금 여리게","매우 세게"],c:2,type:"vol"},
+{q:"pp는 어떤 소리를 나타낼까요?",a:["세게","매우 세게","매우 여리게","조금 세게"],c:2,type:"vol"},
+{q:"f는 어떤 소리를 나타낼까요?",a:["여리게","세게","매우 여리게","점점 세게"],c:1,type:"vol"},
+{q:"mf는 어떤 소리를 나타낼까요?",a:["조금 세게","매우 세게","조금 여리게","점점 여리게"],c:0,type:"vol"},
+{q:"ff는 어떤 소리를 나타낼까요?",a:["매우 세게","세게","매우 여리게","점점 세게"],c:0,type:"vol"},
+{q:"cresc.는 어떤 변화를 나타낼까요?",a:["점점 세게","점점 여리게","점점 느리게","갑자기 세게"],c:0,type:"up"},
+{q:"decresc.는 어떤 변화를 나타낼까요?",a:["점점 세게","점점 여리게","점점 빠르게","갑자기 여리게"],c:1,type:"down"},
+{q:"rit.는 어떤 변화를 나타낼까요?",a:["점점 빠르게","점점 세게","점점 느리게","원래 빠르기로"],c:2,type:"rit"}
+];
+
+let peer=null,roomId="",host=false,connections={},students={},qIndex=0;
+let studentConn=null,studentName="",myScore=0,answered=false;
+
+const $=id=>document.getElementById(id);
+function showTeacher(){ $("teacherView").classList.remove("hidden");$("studentView").classList.add("hidden");$("teacherTab").classList.add("on");$("studentTab").classList.remove("on");}
+function showStudent(){ $("teacherView").classList.add("hidden");$("studentView").classList.remove("hidden");$("studentTab").classList.add("on");$("teacherTab").classList.remove("on");}
+$("teacherTab").onclick=showTeacher;$("studentTab").onclick=showStudent;
+
+function makeVisual(el,t){
+ if(t.type==="vol"){let s='<div class="bars">';for(let i=0;i<6;i++)s+=`<div class="bar" style="height:${30+i*18}px"></div>`;s+='</div><b>소리의 크기</b>';el.innerHTML=s}
+ if(t.type==="up")el.innerHTML='<div class="arrow">↗</div><b>점점 커짐</b>';
+ if(t.type==="down")el.innerHTML='<div class="arrow">↘</div><b>점점 작아짐</b>';
+ if(t.type==="rit")el.innerHTML='<div style="font-size:58px">♩ → ♪ → ♫</div><b>속도가 점점 느려짐</b>';
+}
+function renderTeacherQuestion(){
+ const t=QUESTIONS[qIndex];$("qIndex").textContent=qIndex+1;$("teacherQuestion").textContent=t.q;makeVisual($("teacherVisual"),t);
+ renderStudents();
+}
+function broadcast(msg){Object.values(connections).forEach(c=>{try{c.send(msg)}catch(e){}})}
+function renderStudents(){
+ const vals=Object.values(students);$("count").textContent=vals.length;$("submitted").textContent=vals.filter(s=>s.q===qIndex).length;
+ const list=$("studentList");list.innerHTML="";
+ if(!vals.length){list.innerHTML='<p class="sub">학생이 들어오면 여기에 표시됩니다.</p>';return}
+ vals.sort((a,b)=>b.score-a.score).forEach((s,i)=>{
+  const state=s.q!==qIndex?"대기":(s.correct?"정답":"오답");
+  const cls=s.q===qIndex?(s.correct?"ok":"no"):"wait";
+  const d=document.createElement("div");d.className="student";
+  d.innerHTML=`<span>${i+1}. ${escapeHtml(s.name)}</span><span class="${cls}">${state}</span><strong>${s.score}점</strong>`;
+  list.appendChild(d);
+ });
+}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));}
+
+$("createRoom").onclick=()=>{
+ if(peer)return;
+ $("createRoom").disabled=true;
+ const temp=Math.floor(100000+Math.random()*900000).toString();
+ roomId="music-"+temp;
+ peer=new Peer(roomId);
+ peer.on("open",id=>{
+   $("teacherSetup").classList.add("hidden");$("teacherGame").classList.remove("hidden");$("roomCode").textContent=temp;host=true;renderTeacherQuestion();
+ });
+ peer.on("connection",conn=>{
+   connections[conn.peer]=conn;
+   conn.on("open",()=>conn.send({type:"question",index:qIndex,question:QUESTIONS[qIndex]}));
+   conn.on("data",data=>{
+     if(data.type==="join"){
+       students[conn.peer]={name:data.name,score:0,q:-1,correct:false};renderStudents();
+       conn.send({type:"question",index:qIndex,question:QUESTIONS[qIndex]});
+     }
+     if(data.type==="answer"){
+       const s=students[conn.peer];if(!s||s.q===qIndex)return;
+       s.q=qIndex;s.correct=!!data.correct;if(s.correct)s.score++;renderStudents();
+     }
+   });
+   conn.on("close",()=>{delete connections[conn.peer];delete students[conn.peer];renderStudents()});
+ });
+ peer.on("error",e=>{alert("방을 만들 수 없습니다. 인터넷 연결을 확인해 주세요.");$("createRoom").disabled=false;peer=null});
+};
+$("next").onclick=()=>{
+ if(qIndex>=QUESTIONS.length-1){broadcast({type:"finish"});alert("9문제가 모두 끝났습니다.");return}
+ qIndex++;renderTeacherQuestion();broadcast({type:"question",index:qIndex,question:QUESTIONS[qIndex]});
+};
+$("copyCode").onclick=async()=>{try{await navigator.clipboard.writeText($("roomCode").textContent);$("copyCode").textContent="복사 완료 ✓";setTimeout(()=>$("copyCode").textContent="접속번호 복사",1200)}catch(e){alert("접속번호: "+$("roomCode").textContent)}};
+
+$("joinForm").onsubmit=e=>{
+ e.preventDefault();const code=$("codeInput").value.trim();const nm=$("nameInput").value.trim();
+ if(!/^\d{6}$/.test(code)){showJoinMsg("접속번호는 6자리 숫자입니다.");return}
+ if(!nm){showJoinMsg("이름을 입력하세요.");return}
+ $("joinMsg").classList.add("hidden");studentName=nm;
+ const target="music-"+code;studentConn=new Peer();
+ studentConn.on("open",()=>{const c=studentConn.connect(target,{reliable:true});studentConn._room=c;
+   c.on("open",()=>{c.send({type:"join",name:studentName});$("studentJoin").classList.add("hidden");$("studentGame").classList.remove("hidden");$("myName").textContent=studentName;});
+   c.on("data",data=>{if(data.type==="question")showStudentQuestion(data);if(data.type==="finish"){ $("studentMsg").textContent="퀴즈가 끝났습니다! 최종 점수: "+myScore+"점";disableAnswers();}});
+   c.on("close",()=>showJoinMsg("교사와의 연결이 끊어졌습니다."));
+ });
+ studentConn.on("error",()=>showJoinMsg("접속에 실패했습니다. 교사 화면의 접속번호를 확인하세요."));
+};
+function showJoinMsg(msg){$("joinMsg").textContent=msg;$("joinMsg").classList.remove("hidden")}
+function showStudentQuestion(data){
+ const t=data.question;qIndex=data.index;answered=false;$("studentQuestion").textContent=t.q;makeVisual($("studentVisual"),t);$("studentMsg").textContent="답을 선택하세요.";
+ const box=$("answers");box.innerHTML="";
+ t.a.forEach((a,i)=>{const b=document.createElement("button");b.className="ans";b.textContent=a;b.type="button";b.onclick=()=>answer(i,t,b);box.appendChild(b)});
+}
+function answer(i,t,btn){
+ if(answered)return;answered=true;const ok=i===t.c;if(ok)myScore++;
+ $("myScore").textContent=myScore;
+ [...$("answers").children].forEach((b,j)=>{b.disabled=true;if(j===t.c)b.classList.add("correct");if(j===i&&!ok)b.classList.add("wrong")});
+ $("studentMsg").textContent=ok?"정답! 🎉":"아쉬워요. 다음 문제를 기다리세요.";
+ try{studentConn._room.send({type:"answer",correct:ok,index:qIndex})}catch(e){}
+}
+function disableAnswers(){[...$("answers").children].forEach(b=>b.disabled=true)}
+</script>
+</body>
+</html>
